@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: [ "missingkey=error" ]
+  generators:
+    - matrix:
+        generators:
+          - plugin:
+              configMapRef:
+                name: cluster-config-plugin
+          - list:
+              elements:
+                - name: app1
+                - name: app2
+                - name: app3
+  template:
+    metadata:
+      name: "{{ .name }}"
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:myorg/{{ .name }}.git
+        path: .
+        targetRevision: HEAD
+        helm:
+          parameters:
+            - name: clusterName
+              value: "{{ .clusterName }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default

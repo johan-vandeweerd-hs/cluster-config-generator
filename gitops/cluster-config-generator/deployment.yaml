@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: cluster-config-generator
+  name: cluster-config-generator
+spec:
+  replicas: 2
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app: cluster-config-generator
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: cluster-config-generator
+    spec:
+      containers:
+        - name: cluster-config-generator
+          image: cluster-config-generator:0.0.1
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          resources: {}
+      restartPolicy: Always
+      serviceAccountName: cluster-config-generator

@@ -1,0 +1,360 @@
+argo-cd:
+  # -- Create aggregated roles that extend existing cluster roles to interact with argo-cd resources
+  ## Ref: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
+  createAggregateRoles: true
+  # -- Create cluster roles for cluster-wide installation.
+  ## Used when you manage applications in the same cluster where Argo CD runs
+  createClusterRoles: true
+
+  ## Custom resource configuration
+  crds:
+    # -- Install and upgrade CRDs
+    install: true
+    # -- Keep CRDs on chart uninstall
+    keep: true
+
+  ## Globally shared configuration
+  global:
+    # Default logging options used by all components
+    logging:
+      # -- Set the global logging format. Either: `text` or `json`
+      format: text
+      # -- Set the global logging level. One of: `debug`, `info`, `warn` or `error`
+      level: info
+
+    # -- Toggle and define pod-level security context.
+    securityContext:
+      fsGroup: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+
+    # Default network policy rules used by all components
+    networkPolicy:
+      # -- Create NetworkPolicy objects for all components
+      create: false
+
+    # -- Default priority class for all components
+    priorityClassName: "system-cluster-critical"
+
+  ## Argo Configs
+  configs:
+    # General Argo CD configuration
+    ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cm.yaml
+    cm:
+      # -- Create the argocd-cm configmap for [declarative setup]
+      create: true
+
+      # Enables anonymous user access. The anonymous users get default role permissions specified argocd-rbac-cm.yaml.
+      users.anonymous.enabled: "false"
+      # Specifies token expiration duration
+      users.session.duration: "12h"
+
+      # Enables google analytics tracking is specified
+      ga.trackingid: ""
+      # Unless set to 'false' then user ids are hashed before sending to google analytics
+      ga.anonymizeusers: "true"
+
+      # You can change the resource tracking method Argo CD uses by changing the
+      # setting application.resourceTrackingMethod to the desired method.
+      # The following methods are available:
+      # - label            : Uses the application.instanceLabelKey label for tracking
+      # - annotation       : Uses an annotation with additional metadata for tracking instead of the label
+      # - annotation+label : Also uses an annotation for tracking, but additionally labels the resource with the application name
+      application.resourceTrackingMethod: annotation+label
+
+      # -- Enable local admin user
+      ## Ref: https://argo-cd.readthedocs.io/en/latest/faq/#how-to-disable-admin-user
+      admin.enabled: true
+
+      resource:
+        customizations: |
+          argoproj.io/Application:
+          health.lua: |
+          hs = {}
+          hs.status = "Progressing"
+          hs.message = ""
+          if obj.status ~= nil then
+            if obj.status.health ~= nil then
+              hs.status = obj.status.health.status
+              if obj.status.health.message ~= nil then
+                hs.message = obj.status.health.message
+              end
+            end
+          end
+          return hs
+
+    # Argo CD configuration parameters
+    ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cmd-params-cm.yaml
+    params:
+      ## Controller Properties
+      # -- Number of application status processors
+      controller.status.processors: 20
+      # -- Number of application operation processors
+      controller.operation.processors: 10
+      # -- Specifies timeout between application self heal attempts
+      controller.self.heal.timeout.seconds: 5
+      # -- Repo server RPC call timeout seconds.
+      controller.repo.server.timeout.seconds: 180
+      # Set the logging format. One of: text|json (default "text")
+      controller.log.format: "json"
+      # We patch the app resync interval from the default of 3 minutes to 5 years.
+      # We do this so we can solely rely on a webhook integration to be notified of repository updates on Github.
+      controller.app.resync: "157784760"
+
+      ## Repo-server properties
+      # Repo server RPC call timeout seconds. (default 60)
+      server.repo.server.timeout.seconds: "180"
+      # Limit on number of concurrent manifests generate requests. Any value less the 1 means no limit.
+      server.repo.parallelism.limit: "10"
+      # Use self-signed certificates
+      server.insecure: false
+
+      reposerver.parallelism.limit: "10"
+
+    # Argo CD RBAC policy configuration
+    ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/rbac.md
+    rbac:
+      # -- Create the argocd-rbac-cm configmap with ([Argo CD RBAC policy]) definitions.
+      # If false, it is expected the configmap will be created by something else.
+      # Argo CD will not work if there is no configmap created with the name above.
+      create: true
+
+      # -- OIDC scopes to examine during rbac enforcement (in addition to `sub` scope).
+      # The scope value can be a string, or a list of strings.
+      scopes: "[groups]"
+
+    # ConfigMap for Config Management Plugins
+    # Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/config-management-plugins/
+    cmp:
+      # -- Create the argocd-cmp-cm configmap
+      create: true
+
+      # -- Plugin yaml files to be added to argocd-cmp-cm
+      plugins: {}
+#        kustomized-helm:
+#          init:
+#            command: ["sh", "-c"]
+#            args: ["helm dependency build --repository-config /home/argocd/.config/helm/repositories.yaml"]
+#          generate:
+#            command: ["sh", "-c"]
+#            args: ["helm template $ARGOCD_APP_NAME $ARGOCD_ENV_HELM_TEMPLATE_ARGS . --namespace $ARGOCD_APP_NAMESPACE $ARGOCD_ENV_HELM_TRAILING_ARGS > $ARGOCD_ENV_HELM_OUTPUT_DIR/all.yaml && kustomize build $ARGOCD_ENV_KUSTOMIZATION_DIR"]
+#        kustomize-with-vars-replacement:
+#          generate:
+#            command: ["sh", "-c"]
+#            args: ["kustomize build | sed \"s/CLUSTER_NAME/${cluster_name}/\" | sed \"s/REGION/${region}/\""]
+
+    # Argo CD sensitive data
+    # Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/user-management/#sensitive-data-and-sso-client-secrets
+    secret:
+      # -- Create the argocd-secret
+      createSecret: true
+
+  # -- Array of extra K8s manifests to deploy
+  ## Note: Supports use of custom Helm templates
+  extraObjects: []
+
+  ## Application controller
+  controller:
+    serviceAccount:
+      # -- Create a service account for the application controller
+      create: true
+
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2048Mi
+      limits:
+        memory: 2048Mi
+
+  ## Dex
+  dex:
+    enabled: true
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 128Mi
+
+  ## Redis
+  redis:
+    enabled: true
+
+    # -- Resource limits and requests for redis
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 512Mi
+
+  ## Server
+  server:
+    # -- Argo CD server name
+    name: server
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1000Mi
+      limits:
+        memory: 1000Mi
+
+    ## Server service configuration
+    service:
+      type: NodePort
+      nodePortHttp: 30080
+      nodePortHttps: 30443
+
+    ## Argo CD server Horizontal Pod Autoscaler
+    autoscaling:
+      # -- Enable Horizontal Pod Autoscaler ([HPA]) for the Argo CD server
+      enabled: true
+      # -- Minimum number of replicas for the Argo CD server [HPA]
+      minReplicas: 2
+      # -- Maximum number of replicas for the Argo CD server [HPA]
+      maxReplicas: 5
+      # -- Average CPU utilization percentage for the Argo CD server [HPA]
+      targetCPUUtilizationPercentage: 50
+      # -- Average memory utilization percentage for the Argo CD server [HPA]
+      targetMemoryUtilizationPercentage: 50
+      # -- Configures the scaling behavior of the target in both Up and Down directions.
+      # This is only available on HPA apiVersion `autoscaling/v2beta2` and newer
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          selectPolicy: "Max"
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 300
+            - type: Percent
+              value: 30
+              periodSeconds: 300
+        scaleUp:
+          stabilizationWindowSeconds: 0
+
+    ## Argo CD server Pod Disruption Budget
+    ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+    pdb:
+      # -- Deploy a [PodDisruptionBudget] for the Argo CD server
+      enabled: true
+      # -- Number of pods that are unavailable after eviction as number or percentage (eg.: 50%).
+      ## Has higher precedence over `server.pdb.minAvailable`
+      maxUnavailable: "1"
+
+    ingress:
+      enabled: false
+
+  ## Repo Server
+  repoServer:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1500Mi
+        ephemeral-storage: "1Gi"
+      limits:
+        memory: 1500Mi
+        ephemeral-storage: "1Gi"
+
+    # -- Repo server container-level security context
+    # @default -- See [values.yaml]
+    containerSecurityContext:
+      runAsUser: 999
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+
+    ## Repo server Horizontal Pod Autoscaler
+    autoscaling:
+      # -- Enable Horizontal Pod Autoscaler ([HPA]) for the repo server
+      enabled: true
+      # -- Minimum number of replicas for the repo server [HPA]
+      minReplicas: 2
+      # -- Maximum number of replicas for the repo server [HPA]
+      maxReplicas: 5
+      # -- Average CPU utilization percentage for the repo server [HPA]
+      targetCPUUtilizationPercentage: 50
+      # -- Average memory utilization percentage for the repo server [HPA]
+      targetMemoryUtilizationPercentage: 50
+      # -- Configures the scaling behavior of the target in both Up and Down directions.
+      # This is only available on HPA apiVersion `autoscaling/v2beta2` and newer
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          selectPolicy: "Max"
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 300
+            - type: Percent
+              value: 30
+              periodSeconds: 300
+        scaleUp:
+          stabilizationWindowSeconds: 0
+
+    ## Repo server Pod Disruption Budget
+    ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+    pdb:
+      # -- Deploy a [PodDisruptionBudget] for the repo server
+      enabled: true
+      # -- Number of pods that are unavailable after eviction as number or percentage (eg.: 50%).
+      ## Has higher precedence over `repoServer.pdb.minAvailable`
+      maxUnavailable: "1"
+
+    # -- Additional volumes to the repo server pod
+    volumes:
+      - name: argocd-cmp-cm
+        configMap:
+          name: argocd-cmp-cm
+      - name: cmp-tmp
+        emptyDir: {}
+
+    ## Enable Custom Rules for the Repo server's Cluster Role resource
+    ## Enable this and set the rules: to whatever custom rules you want for the Cluster Role resource.
+    ## Defaults to off
+    clusterRoleRules:
+      # -- Enable custom rules for the Repo server's Cluster Role resource
+      enabled: true
+      # -- List of custom rules for the Repo server's Cluster Role resource
+      rules: []
+
+    ## Repo server service account
+    ## If create is set to true, make sure to uncomment the name and update the rbac section below
+    serviceAccount:
+      # -- Create repo server service account
+      create: true
+
+    # -- Repo server rbac rules
+    rbac: []
+    #   - apiGroups:
+    #     - argoproj.io
+    #     resources:
+    #     - applications
+    #     verbs:
+    #     - get
+    #     - list
+    #     - watch
+
+  ## ApplicationSet controller
+  applicationSet:
+    # -- Enable ApplicationSet controller
+    enabled: true
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 128Mi
+
+  ## Notifications controller
+  notifications:
+    enabled: false

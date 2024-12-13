@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-config-plugin
+data:
+  token: "$cluster-config-plugin:plugin.cluster-config.token"
+  baseUrl: "http://cluster-config-generator.argocd.svc.cluster.local."
